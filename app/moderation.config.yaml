@@ -1,0 +1,117 @@
+# BWC content moderation configuration
+# Used by moderator-ts to drive the Strands Decider 2B pipeline.
+#
+# state_template: how to build the Decider state from the card payload.
+#   Supports {field} interpolation over any string field in the card.
+#
+# deny_list: exact lowercase title matches — exit immediately as HIDE.
+#
+# questions: Decider 2B questions, processed in order.
+#   Text questions (image_only: false) are batched in one POST.
+#   Image questions (image_only: true) are batched in a separate POST
+#   and only sent when the card has an image — this prevents image tokens
+#   from bleeding into text question calibration.
+#
+# See docs/submission.md for architecture details.
+
+version: 1
+
+state_template: "{title}\n{description}"
+
+# Which field in items[].fields contains the image data (BWC RLE+UTF-16 format).
+# Set to null or omit if your content has no images.
+image_field: "image"
+
+deny_list: []
+
+questions:
+  - name: no_value
+    threshold: 0.36
+    action: hide
+    image_only: false
+    type: choice
+    instructions: >-
+      You are reviewing a card for an adult party card game.
+      Cards have a title and a description.
+      A valid card has SOME game purpose — a dare, a rule, a point mechanic,
+      a joke, an effect, or anything a player could act on.
+      Your job is ONLY to identify obvious test submissions: cards where someone
+      typed placeholder text with zero intent to create a real card.
+      This is a very narrow category — when in doubt, the card has game value.
+    criteria:
+      hide: >-
+        HIDE only if BOTH of these are true:
+        (A) the title is clearly a test/placeholder (e.g. 'test', 'HA', '1',
+        a random keysmash, or two-letter nonsense with no game meaning), AND
+        (B) the description ALSO has no game content (another placeholder,
+        a single unrelated word, or text that makes clear this was never
+        intended as a real card).
+        BOTH conditions must hold. A weak title with a real description = keep.
+      ok: >-
+        KEEP the card if it has ANY real content:
+        a recognisable word or phrase as the title, regardless of how crude
+        or offensive it is — crude words are normal game content;
+        a description with any game mechanic, point value, dare, or effect;
+        any content that suggests the creator intended a real game card.
+        When in doubt, keep.
+
+  - name: harm
+    threshold: 0.65
+    action: hide
+    image_only: false
+    type: choice
+    instructions: >-
+      You are reviewing cards for a sandbox party card game with no formal rules.
+      The game is intentionally irreverent — dark humour, satire, crude content,
+      caricature, historical references, and offensive game mechanics are all
+      normal and welcome. Players are encouraged to be provocative.
+      Your job is narrow: identify cards that express sincere real-world hatred
+      directed at a group of people, or sincere personal threats against
+      an individual. Artistic critique, satire, dark game mechanics,
+      and offensive humour are explicitly permitted. Judge intent and framing,
+      not topic alone.
+    criteria:
+      hide: >-
+        HIDE only if the card expresses sincere, targeted real-world hatred or
+        threat with no satirical, artistic, or game framing.
+        The two patterns that qualify:
+        (1) A sincere call for the elimination of or violence against a real
+        ethnic, religious, or national group — not as a game mechanic or
+        satirical device, but as a genuine expression of hatred or incitement.
+        (2) A personal threat that includes identifying information about a
+        real individual (location, address, or personal details suggesting
+        intent to cause real harm).
+        The test: does this read as something a person genuinely means as
+        real-world hatred or threat, rather than as a provocative game card?
+      ok: >-
+        KEEP in all other cases, including:
+        dark game mechanics using violence, death, or tragedy as point effects;
+        satire and caricature of public or historical figures, however harsh;
+        crude, offensive, or taboo language used as a dare or game action;
+        dark humour involving sensitive topics when framed as a game mechanic
+        or satirical commentary rather than sincere personal belief;
+        controversial political or social content expressed as critique or humour;
+        anything where the framing suggests a game card rather than a sincere
+        real-world statement. When in doubt, keep.
+
+  - name: image_harm
+    threshold: 0.65
+    action: hide
+    image_only: true
+    type: choice
+    instructions: >-
+      You are reviewing a hand-drawn image submitted by a player for an adult party card game.
+      The game permits crude and offensive content.
+      Your job is to identify images that contain genuinely harmful visual content:
+      hate symbols, hate speech written in the image, or explicit sexual imagery.
+      Most images — including violent, dark, or crude drawings — are fine.
+    criteria:
+      hide: >-
+        HIDE if the image visually contains: a recognised hate symbol,
+        hateful slurs or hate speech written as handwriting in the drawing,
+        or explicit sexual imagery.
+        The bar is high — only clear, unambiguous cases.
+      ok: >-
+        KEEP for everything else: drawings of people, animals, objects, abstract shapes,
+        cartoon violence, nudity that is not explicit, crude humour, dark themes.
+        When in doubt, keep.

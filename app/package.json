@@ -1,0 +1,27 @@
+{
+  "name": "@ohnomer/moderator-ts-agent",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "esbuild main.ts --bundle --platform=node --format=esm --outfile=dist/main.js --packages=external",
+    "start": "node dist/main.js",
+    "dev": "npx tsx main.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1073.0",
+    "@types/pngjs": "^6.0.5",
+    "bedrock-agentcore": "^0.4.1",
+    "js-yaml": "5.5.0",
+    "leo-profanity": "^1.7.0",
+    "pngjs": "^7.0.0",
+    "undici": "^7.10.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "4.0.9",
+    "@types/node": "^24.10.1",
+    "esbuild": "^0.28.1",
+    "tsx": "^4.0.0",
+    "typescript": "~5.9.3"
+  }
+}

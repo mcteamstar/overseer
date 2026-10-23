@@ -1,0 +1,24 @@
+{
+  "name": "overseer",
+  "version": 2,
+  "managedBy": "CDK",
+  "runtimes": [
+    {
+      "name": "moderator",
+      "build": "Container",
+      "entrypoint": "dist/main.js",
+      "codeLocation": "app",
+      "protocol": "HTTP",
+      "dockerfile": "Dockerfile"
+    }
+  ],
+  "memories": [],
+  "knowledgeBases": [],
+  "credentials": [],
+  "evaluators": [],
+  "onlineEvalConfigs": [],
+  "agentCoreGateways": [],
+  "policyEngines": [],
+  "configBundles": [],
+  "harnesses": []
+}
