@@ -26,7 +26,7 @@ The fit for content moderation is practically perfect. Strands Decider reads the
 
 ## The pipeline
 
-![Overseer architecture](img/architecture.png)
+![Overseer architecture](https://raw.githubusercontent.com/mcteamstar/overseer/main/docs/img/architecture.png)
 
 The agent implements four sequential stages, each cheaper and faster than the last, designed so that cards requiring action exit as early as possible.
 
