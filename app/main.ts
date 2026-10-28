@@ -67,6 +67,7 @@ console.info(`[moderator-ts] Loaded config from ${CONFIG_PATH} (${config.questio
 
 const REGION = process.env.AWS_REGION ?? 'ap-southeast-2';
 const DECIDER_URL = process.env.DECIDER_URL ?? 'http://localhost:8000/v1/systemone';
+// DECIDER_KEY is resolved from SSM in start.sh before the node process starts
 const DECIDER_KEY = process.env.DECIDER_KEY ?? '';
 const DECIDER_MODEL = process.env.DECIDER_MODEL ?? 'strands-decider';
 // Nova model — read from SSM at deploy time
