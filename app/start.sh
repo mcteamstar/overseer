@@ -7,9 +7,8 @@ set -e
 # Resolve them here before starting the process.
 
 ssm_get() {
-  local param_name="$1"
   aws ssm get-parameter \
-    --name "$param_name" \
+    --name "$1" \
     --with-decryption \
     --query "Parameter.Value" \
     --output text \
@@ -33,47 +32,78 @@ fi
 
 # ── Tailscale ──────────────────────────────────────────────────────────────────
 
-if [ -n "$TS_STATE" ]; then
-  echo "[overseer] Starting tailscaled with pre-auth state..."
-  echo "$TS_STATE" | base64 -d > /tmp/ts-state
+ts_connect() {
+  # Try to bring up tailscale and verify it's actually connected.
+  # Returns 0 if connected, 1 otherwise.
+  tailscale up "$@" \
+    --hostname="core-overseer" \
+    --accept-dns=true \
+    --accept-routes=false \
+    --timeout=20s \
+    2>&1 || return 1
+  # Verify the node is online
+  tailscale status 2>&1 | grep -q "^core-overseer\|Logged in" && return 0 || return 1
+}
 
-  # Enable HTTP CONNECT proxy on :1080 for userspace-networking outbound
+ts_started=0
+
+if [ -n "$TS_STATE" ]; then
+  echo "[overseer] Trying tailscaled with pre-auth state..."
+  echo "$TS_STATE" | base64 -d > /tmp/ts-state 2>/dev/null || true
+
   tailscaled \
     --state=/tmp/ts-state \
     --tun=userspace-networking \
     --outbound-http-proxy-listen=localhost:1080 &
-  sleep 2
+  sleep 3
 
-  tailscale up \
-    --hostname="core-overseer" \
-    --accept-dns=true \
-    --accept-routes=false \
-    --timeout=15s \
-    2>&1 || echo "[overseer] Tailscale up warning (continuing)"
+  if ts_connect; then
+    echo "[overseer] Tailscale ready (pre-auth state)"
+    ts_started=1
+  else
+    echo "[overseer] State auth failed — falling back to auth key"
+    # Kill the daemon and retry with auth key
+    pkill tailscaled 2>/dev/null || true
+    sleep 1
+  fi
+fi
 
-  export ALL_PROXY=http://localhost:1080
-  export HTTP_PROXY=http://localhost:1080
-
-  echo "[overseer] Tailscale ready (pre-auth state loaded, HTTP proxy at :1080)"
-elif [ -n "$TS_AUTHKEY" ]; then
-  echo "[overseer] Starting tailscaled with auth key (slow path)..."
+if [ "$ts_started" = "0" ] && [ -n "$TS_AUTHKEY" ]; then
+  echo "[overseer] Starting tailscaled with auth key..."
   tailscaled \
     --state=mem: \
     --tun=userspace-networking \
     --outbound-http-proxy-listen=localhost:1080 &
   sleep 2
-  tailscale up \
-    --authkey="$TS_AUTHKEY" \
-    --hostname="core-overseer" \
-    --accept-dns=true \
-    --accept-routes=false \
-    --timeout=60s \
-    2>&1 &
+
+  if ts_connect --authkey="$TS_AUTHKEY"; then
+    echo "[overseer] Tailscale ready (auth key)"
+    ts_started=1
+
+    # Capture state for next boot — write base64-encoded state back to SSM
+    if [ -n "$TS_STATE_PARAM" ]; then
+      NEW_STATE=$(tailscale debug state 2>/dev/null | base64 2>/dev/null) || true
+      if [ -n "$NEW_STATE" ]; then
+        aws ssm put-parameter \
+          --name "$TS_STATE_PARAM" \
+          --value "$NEW_STATE" \
+          --type SecureString \
+          --overwrite \
+          --region "${AWS_REGION:-ap-southeast-2}" 2>/dev/null \
+          && echo "[overseer] Saved fresh Tailscale state to SSM" \
+          || echo "[overseer] Warning: could not save Tailscale state to SSM"
+      fi
+    fi
+  else
+    echo "[overseer] Auth key connect failed — running without Tailscale"
+  fi
+fi
+
+if [ "$ts_started" = "1" ]; then
   export ALL_PROXY=http://localhost:1080
   export HTTP_PROXY=http://localhost:1080
-  echo "[overseer] Tailscale connecting in background..."
 else
-  echo "[overseer] No TS_STATE or TS_AUTHKEY — dev mode"
+  echo "[overseer] No Tailscale — Decider calls will fail unless DECIDER_URL is reachable directly"
 fi
 
 exec node main.js
